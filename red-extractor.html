@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Red Tone Alpha Extractor</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Color Tone Alpha Extractor</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -25,8 +25,8 @@
 <body class="min-h-screen p-4 md:p-8">
     <div class="max-w-4xl mx-auto">
         <header class="mb-8 text-center">
-            <h1 class="text-3xl font-bold text-red-500 mb-2">Red Alpha Extractor</h1>
-            <p class="text-slate-400">Upload an image to isolate red shades and convert the rest to transparency.</p>
+            <h1 id="mainTitle" class="text-3xl font-bold text-red-500 mb-2">Color Alpha Extractor</h1>
+            <p class="text-slate-400">Upload an image to isolate a color channel (red, green or blue) and convert the rest to transparency.</p>
         </header>
 
         <main class="grid gap-8">
@@ -54,10 +54,18 @@
                         </div>
                     </div>
 
-                    <button id="downloadBtn" disabled
-                        class="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors">
-                        Download PNG
-                    </button>
+                    <div class="flex flex-col items-center gap-2">
+                        <label class="block text-sm font-medium mb-1 text-slate-300">Target Color</label>
+                        <select id="colorSelect" class="bg-slate-700 text-slate-200 px-3 py-2 rounded-md text-sm">
+                            <option value="red" selected>Red</option>
+                            <option value="green">Green</option>
+                            <option value="blue">Blue</option>
+                        </select>
+                        <button id="downloadBtn" disabled
+                            class="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors">
+                            Download PNG
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -82,7 +90,7 @@
         </main>
 
         <footer class="mt-12 text-center text-slate-500 text-sm">
-            Pixels are kept if <code class="bg-slate-900 px-1 rounded text-red-400">Red > (Green + Blue) / 2</code>
+            <span id="ruleText">Pixels are kept if <code class="bg-slate-900 px-1 rounded text-red-400">Red > (Green + Blue) / 2</code></span>
         </footer>
     </div>
 
@@ -94,9 +102,28 @@
         const downloadBtn = document.getElementById('downloadBtn');
         const origPlaceholder = document.getElementById('origPlaceholder');
         const procPlaceholder = document.getElementById('procPlaceholder');
+        const colorSelect = document.getElementById('colorSelect');
+        const mainTitle = document.getElementById('mainTitle');
+        const ruleText = document.getElementById('ruleText');
+
         const ctx = outputCanvas.getContext('2d');
 
         let originalImage = null;
+
+        // Map color name to channel index and tailwind text class for the title
+        const channelIndex = { red: 0, green: 1, blue: 2 };
+        const titleColorClass = { red: 'text-red-500', green: 'text-green-400', blue: 'text-blue-400' };
+
+        function updateUIForColor(selected) {
+            // Update footer rule text
+            const cap = selected.charAt(0).toUpperCase() + selected.slice(1);
+            const others = ['red', 'green', 'blue'].filter(c => c !== selected).map(s => s.charAt(0).toUpperCase() + s.slice(1));
+            ruleText.innerHTML = `Pixels are kept if <code class="bg-slate-900 px-1 rounded text-${selected}-400">${cap} &gt; (${others[0]} + ${others[1]}) / 2</code>`;
+
+            // Update title color (swap classes)
+            Object.values(titleColorClass).forEach(cls => mainTitle.classList.remove(cls));
+            mainTitle.classList.add(titleColorClass[selected]);
+        }
 
         imageInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -125,35 +152,46 @@
             if (originalImage) processImage();
         });
 
+        colorSelect.addEventListener('change', () => {
+            updateUIForColor(colorSelect.value);
+            if (originalImage) processImage();
+        });
+
+        // Initialize UI
+        updateUIForColor(colorSelect.value);
+
         function processImage() {
+            if (!originalImage) return;
+
             // Set canvas size to match image
             outputCanvas.width = originalImage.width;
             outputCanvas.height = originalImage.height;
 
             // Draw original image
+            ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
             ctx.drawImage(originalImage, 0, 0);
 
             // Get image data
             const imageData = ctx.getImageData(0, 0, outputCanvas.width, outputCanvas.height);
             const data = imageData.data;
-            const sensitivity = parseInt(threshold.value);
+            const sensitivity = parseInt(threshold.value, 10);
+            const target = channelIndex[colorSelect.value];
 
             for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];     // Red
-                const g = data[i + 1]; // Green
-                const b = data[i + 2]; // Blue
-
-                // Algorithm: Determine "Redness"
-                // Pixel is considered red if Red component is significantly higher than Average of others
-                const otherAvg = (g + b) / 2;
-                const diff = r - otherAvg;
+                // data[i] = R, [i+1] = G, [i+2] = B, [i+3] = A
+                const t = data[i + target];
+                // indices of the other two channels
+                const others = [0,1,2].filter(idx => idx !== target);
+                const otherAvg = (data[i + others[0]] + data[i + others[1]]) / 2;
+                const diff = t - otherAvg;
 
                 if (diff < sensitivity) {
-                    // Turn transparent if not red enough
-                    data[i + 3] = 0; 
+                    // Not strong enough in the target color: make pixel fully transparent
+                    data[i + 3] = 0;
                 } else {
-                    // Optional: You can also adjust transparency based on the strength of the red
-                    // data[i + 3] = Math.min(255, diff * 2); 
+                    // Keep original alpha (or optionally modify alpha based on diff)
+                    // Example to vary alpha by strength:
+                    // data[i + 3] = Math.min(255, Math.max(100, diff * 2));
                 }
             }
 
@@ -162,8 +200,9 @@
         }
 
         downloadBtn.addEventListener('click', () => {
+            if (outputCanvas.width === 0 || outputCanvas.height === 0) return;
             const link = document.createElement('a');
-            link.download = 'red-extracted.png';
+            link.download = `${colorSelect.value}-extracted.png`;
             link.href = outputCanvas.toDataURL('image/png');
             link.click();
         });
