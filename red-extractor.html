@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Tone Alpha Extractor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f1f5f9;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        .canvas-container {
+            background-image: 
+                linear-gradient(45deg, #1e293b 25%, transparent 25%), 
+                linear-gradient(-45deg, #1e293b 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #1e293b 75%), 
+                linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-red-500 mb-2">Red Alpha Extractor</h1>
+            <p class="text-slate-400">Upload an image to isolate red shades and convert the rest to transparency.</p>
+        </header>
+
+        <main class="grid gap-8">
+            <!-- Controls -->
+            <div class="bg-slate-800 p-6 rounded-xl shadow-xl border border-slate-700">
+                <div class="flex flex-col md:flex-row items-center gap-6">
+                    <label class="flex-1 w-full">
+                        <span class="block text-sm font-medium mb-2 text-slate-300">Upload Image</span>
+                        <input type="file" id="imageInput" accept="image/*" 
+                            class="block w-full text-sm text-slate-400
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-full file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-red-500 file:text-white
+                            hover:file:bg-red-600 cursor-pointer">
+                    </label>
+
+                    <div class="flex-1 w-full">
+                        <label class="block text-sm font-medium mb-2 text-slate-300">Sensitivity (Threshold)</label>
+                        <input type="range" id="threshold" min="0" max="100" value="20" 
+                            class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500">
+                        <div class="flex justify-between text-xs text-slate-500 mt-1">
+                            <span>Strict</span>
+                            <span>Loose</span>
+                        </div>
+                    </div>
+
+                    <button id="downloadBtn" disabled
+                        class="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors">
+                        Download PNG
+                    </button>
+                </div>
+            </div>
+
+            <!-- Preview Area -->
+            <div class="grid md:grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Original</h3>
+                    <div class="aspect-square rounded-lg bg-slate-900 border border-slate-700 overflow-hidden flex items-center justify-center">
+                        <img id="originalPreview" class="max-w-full max-h-full hidden" alt="Original">
+                        <p id="origPlaceholder" class="text-slate-600 italic">No image selected</p>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Processed (Transparent)</h3>
+                    <div class="canvas-container aspect-square rounded-lg border border-slate-700 overflow-hidden flex items-center justify-center">
+                        <canvas id="outputCanvas" class="max-w-full max-h-full hidden"></canvas>
+                        <p id="procPlaceholder" class="text-slate-600 italic">Upload an image to process</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="mt-12 text-center text-slate-500 text-sm">
+            Pixels are kept if <code class="bg-slate-900 px-1 rounded text-red-400">Red > (Green + Blue) / 2</code>
+        </footer>
+    </div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const threshold = document.getElementById('threshold');
+        const originalPreview = document.getElementById('originalPreview');
+        const outputCanvas = document.getElementById('outputCanvas');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const origPlaceholder = document.getElementById('origPlaceholder');
+        const procPlaceholder = document.getElementById('procPlaceholder');
+        const ctx = outputCanvas.getContext('2d');
+
+        let originalImage = null;
+
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                originalImage = new Image();
+                originalImage.onload = () => {
+                    originalPreview.src = event.target.result;
+                    originalPreview.classList.remove('hidden');
+                    origPlaceholder.classList.add('hidden');
+                    
+                    outputCanvas.classList.remove('hidden');
+                    procPlaceholder.classList.add('hidden');
+                    
+                    processImage();
+                    downloadBtn.disabled = false;
+                };
+                originalImage.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        threshold.addEventListener('input', () => {
+            if (originalImage) processImage();
+        });
+
+        function processImage() {
+            // Set canvas size to match image
+            outputCanvas.width = originalImage.width;
+            outputCanvas.height = originalImage.height;
+
+            // Draw original image
+            ctx.drawImage(originalImage, 0, 0);
+
+            // Get image data
+            const imageData = ctx.getImageData(0, 0, outputCanvas.width, outputCanvas.height);
+            const data = imageData.data;
+            const sensitivity = parseInt(threshold.value);
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];     // Red
+                const g = data[i + 1]; // Green
+                const b = data[i + 2]; // Blue
+
+                // Algorithm: Determine "Redness"
+                // Pixel is considered red if Red component is significantly higher than Average of others
+                const otherAvg = (g + b) / 2;
+                const diff = r - otherAvg;
+
+                if (diff < sensitivity) {
+                    // Turn transparent if not red enough
+                    data[i + 3] = 0; 
+                } else {
+                    // Optional: You can also adjust transparency based on the strength of the red
+                    // data[i + 3] = Math.min(255, diff * 2); 
+                }
+            }
+
+            // Put modified data back
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'red-extracted.png';
+            link.href = outputCanvas.toDataURL('image/png');
+            link.click();
+        });
+    </script>
+</body>
+</html>
