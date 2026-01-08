@@ -26,46 +26,72 @@
     <div class="max-w-4xl mx-auto">
         <header class="mb-8 text-center">
             <h1 id="mainTitle" class="text-3xl font-bold text-red-500 mb-2">Color Alpha Extractor</h1>
-            <p class="text-slate-400">Upload an image to isolate a color channel (red, green or blue) and convert the rest to transparency.</p>
+            <p class="text-slate-400">Upload an image to isolate a color channel (e.g., red, green, blue) or hue (e.g., orange, cyan) and convert the rest to transparency.</p>
         </header>
 
         <main class="grid gap-8">
             <!-- Controls -->
             <div class="bg-slate-800 p-6 rounded-xl shadow-xl border border-slate-700">
-                <div class="flex flex-col md:flex-row items-center gap-6">
-                    <label class="flex-1 w-full">
-                        <span class="block text-sm font-medium mb-2 text-slate-300">Upload Image</span>
-                        <input type="file" id="imageInput" accept="image/*" 
-                            class="block w-full text-sm text-slate-400
-                            file:mr-4 file:py-2 file:px-4
-                            file:rounded-full file:border-0
-                            file:text-sm file:font-semibold
-                            file:bg-red-500 file:text-white
-                            hover:file:bg-red-600 cursor-pointer">
-                    </label>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
 
-                    <div class="flex-1 w-full">
-                        <label class="block text-sm font-medium mb-2 text-slate-300">Sensitivity (Threshold)</label>
-                        <input type="range" id="threshold" min="0" max="100" value="20" 
-                            class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500">
-                        <div class="flex justify-between text-xs text-slate-500 mt-1">
-                            <span>Strict</span>
-                            <span>Loose</span>
+                    <!-- Left Column -->
+                    <div class="space-y-4">
+                        <label class="block">
+                            <span class="block text-sm font-medium mb-2 text-slate-300">1. Upload Image</span>
+                            <input type="file" id="imageInput" accept="image/*"
+                                class="block w-full text-sm text-slate-400
+                                file:mr-4 file:py-2 file:px-4
+                                file:rounded-full file:border-0
+                                file:text-sm file:font-semibold
+                                file:bg-sky-500 file:text-white
+                                hover:file:bg-sky-600 cursor-pointer">
+                        </label>
+
+                        <div>
+                            <label for="systemSelect" class="block text-sm font-medium mb-2 text-slate-300">2. Select Color System</label>
+                            <select id="systemSelect" class="w-full bg-slate-700 text-slate-200 px-3 py-2 rounded-md text-sm">
+                                <option value="rgb" selected>RGB</option>
+                                <option value="hsl">HSL</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div class="flex flex-col items-center gap-2">
-                        <label class="block text-sm font-medium mb-1 text-slate-300">Target Color</label>
-                        <select id="colorSelect" class="bg-slate-700 text-slate-200 px-3 py-2 rounded-md text-sm">
-                            <option value="red" selected>Red</option>
-                            <option value="green">Green</option>
-                            <option value="blue">Blue</option>
-                        </select>
-                        <button id="downloadBtn" disabled
-                            class="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors">
-                            Download PNG
-                        </button>
+                    <!-- Right Column -->
+                    <div class="space-y-4">
+                        <div>
+                            <label for="threshold" class="block text-sm font-medium mb-2 text-slate-300">3. Adjust Sensitivity</label>
+                            <input type="range" id="threshold" min="0" max="100" value="20"
+                                class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500">
+                            <div class="flex justify-between text-xs text-slate-500 mt-1">
+                                <span>Strict</span>
+                                <span>Loose</span>
+                            </div>
+                        </div>
+
+                        <!-- RGB Specific Controls -->
+                        <div id="rgbControls">
+                            <label for="colorSelect" class="block text-sm font-medium mb-2 text-slate-300">4. Pick Target Color</label>
+                            <select id="colorSelect" class="w-full bg-slate-700 text-slate-200 px-3 py-2 rounded-md text-sm">
+                                <option value="red" selected>Red</option>
+                                <option value="green">Green</option>
+                                <option value="blue">Blue</option>
+                            </select>
+                        </div>
+
+                        <!-- HSL Specific Controls -->
+                        <div id="hslControls" class="hidden">
+                            <label for="hueSlider" class="block text-sm font-medium mb-2 text-slate-300">4. Pick Target Hue (<span id="hueValue" class="font-mono">0</span>°)</label>
+                            <input type="range" id="hueSlider" min="0" max="360" value="0"
+                                class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500">
+                             <div class="h-2 w-full mt-1 rounded-lg" id="hueGradient"></div>
+                        </div>
                     </div>
+                </div>
+                 <div class="mt-6 text-center">
+                    <button id="downloadBtn" disabled
+                        class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors">
+                        Download PNG
+                    </button>
                 </div>
             </div>
 
@@ -102,33 +128,68 @@
         const downloadBtn = document.getElementById('downloadBtn');
         const origPlaceholder = document.getElementById('origPlaceholder');
         const procPlaceholder = document.getElementById('procPlaceholder');
+
+        const systemSelect = document.getElementById('systemSelect');
         const colorSelect = document.getElementById('colorSelect');
+        const hueSlider = document.getElementById('hueSlider');
+        const hueValue = document.getElementById('hueValue');
+
+        const rgbControls = document.getElementById('rgbControls');
+        const hslControls = document.getElementById('hslControls');
+
         const mainTitle = document.getElementById('mainTitle');
         const ruleText = document.getElementById('ruleText');
+        const hueGradient = document.getElementById('hueGradient');
 
         const ctx = outputCanvas.getContext('2d');
-
         let originalImage = null;
 
-        // Map color name to channel index and tailwind text class for the title
         const channelIndex = { red: 0, green: 1, blue: 2 };
-        const titleColorClass = { red: 'text-red-500', green: 'text-green-400', blue: 'text-blue-400' };
+        const titleColorClass = { red: 'text-red-500', green: 'text-green-400', blue: 'text-blue-400', hsl: 'text-sky-400' };
 
-        function updateUIForColor(selected) {
-            // Update footer rule text
-            const cap = selected.charAt(0).toUpperCase() + selected.slice(1);
-            const others = ['red', 'green', 'blue'].filter(c => c !== selected).map(s => s.charAt(0).toUpperCase() + s.slice(1));
-            ruleText.innerHTML = `Pixels are kept if <code class="bg-slate-900 px-1 rounded text-${selected}-400">${cap} &gt; (${others[0]} + ${others[1]}) / 2</code>`;
+        function rgbToHsl(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+            if (max === min) {
+                h = s = 0; // achromatic
+            } else {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    case b: h = (r - g) / d + 4; break;
+                }
+                h /= 6;
+            }
+            return [h * 360, s, l];
+        }
 
-            // Update title color (swap classes)
-            Object.values(titleColorClass).forEach(cls => mainTitle.classList.remove(cls));
-            mainTitle.classList.add(titleColorClass[selected]);
+        function updateUI() {
+            const system = systemSelect.value;
+            if (system === 'rgb') {
+                rgbControls.classList.remove('hidden');
+                hslControls.classList.add('hidden');
+                const selected = colorSelect.value;
+                const cap = selected.charAt(0).toUpperCase() + selected.slice(1);
+                const others = ['red', 'green', 'blue'].filter(c => c !== selected).map(s => s.charAt(0).toUpperCase() + s.slice(1));
+                ruleText.innerHTML = `Pixels are kept if <code class="bg-slate-900 px-1 rounded text-${selected}-400">${cap} > (${others[0]} + ${others[1]}) / 2 ± Sensitivity</code>`;
+                Object.values(titleColorClass).forEach(cls => mainTitle.classList.remove(cls));
+                mainTitle.classList.add(titleColorClass[selected]);
+            } else { // HSL
+                rgbControls.classList.add('hidden');
+                hslControls.classList.remove('hidden');
+                ruleText.innerHTML = `Pixels are kept if their hue is close to <code class="bg-slate-900 px-1 rounded" style="color: hsl(${hueSlider.value}, 100%, 70%)">${hueSlider.value}° ± Sensitivity</code>`;
+                Object.values(titleColorClass).forEach(cls => mainTitle.classList.remove(cls));
+                mainTitle.classList.add(titleColorClass.hsl);
+            }
+            if (originalImage) processImage();
         }
 
         imageInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = (event) => {
                 originalImage = new Image();
@@ -136,10 +197,8 @@
                     originalPreview.src = event.target.result;
                     originalPreview.classList.remove('hidden');
                     origPlaceholder.classList.add('hidden');
-                    
                     outputCanvas.classList.remove('hidden');
                     procPlaceholder.classList.add('hidden');
-                    
                     processImage();
                     downloadBtn.disabled = false;
                 };
@@ -148,61 +207,68 @@
             reader.readAsDataURL(file);
         });
 
-        threshold.addEventListener('input', () => {
-            if (originalImage) processImage();
-        });
-
-        colorSelect.addEventListener('change', () => {
-            updateUIForColor(colorSelect.value);
-            if (originalImage) processImage();
+        threshold.addEventListener('input', () => { if (originalImage) processImage(); });
+        systemSelect.addEventListener('change', updateUI);
+        colorSelect.addEventListener('change', updateUI);
+        hueSlider.addEventListener('input', (e) => {
+            hueValue.textContent = e.target.value;
+            updateUI();
         });
 
         // Initialize UI
-        updateUIForColor(colorSelect.value);
+        hueGradient.style.background = 'linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)';
+        updateUI();
 
         function processImage() {
             if (!originalImage) return;
 
-            // Set canvas size to match image
             outputCanvas.width = originalImage.width;
             outputCanvas.height = originalImage.height;
-
-            // Draw original image
             ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
             ctx.drawImage(originalImage, 0, 0);
 
-            // Get image data
             const imageData = ctx.getImageData(0, 0, outputCanvas.width, outputCanvas.height);
             const data = imageData.data;
-            const sensitivity = parseInt(threshold.value, 10);
-            const target = channelIndex[colorSelect.value];
+            const system = systemSelect.value;
 
-            for (let i = 0; i < data.length; i += 4) {
-                // data[i] = R, [i+1] = G, [i+2] = B, [i+3] = A
-                const t = data[i + target];
-                // indices of the other two channels
-                const others = [0,1,2].filter(idx => idx !== target);
-                const otherAvg = (data[i + others[0]] + data[i + others[1]]) / 2;
-                const diff = t - otherAvg;
+            if (system === 'rgb') {
+                const sensitivity = parseInt(threshold.value, 10);
+                const target = channelIndex[colorSelect.value];
+                for (let i = 0; i < data.length; i += 4) {
+                    const t = data[i + target];
+                    const others = [0,1,2].filter(idx => idx !== target);
+                    const otherAvg = (data[i + others[0]] + data[i + others[1]]) / 2;
+                    const diff = t - otherAvg;
+                    if (diff < sensitivity) {
+                        data[i + 3] = 0;
+                    }
+                }
+            } else { // HSL
+                const targetHue = parseInt(hueSlider.value, 10);
+                const sensitivity = parseInt(threshold.value, 10) * 1.8; // Scale sensitivity for 0-360 range
+                 for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i], g = data[i+1], b = data[i+2];
+                    const [hue, sat, light] = rgbToHsl(r, g, b);
 
-                if (diff < sensitivity) {
-                    // Not strong enough in the target color: make pixel fully transparent
-                    data[i + 3] = 0;
-                } else {
-                    // Keep original alpha (or optionally modify alpha based on diff)
-                    // Example to vary alpha by strength:
-                    // data[i + 3] = Math.min(255, Math.max(100, diff * 2));
+                    // a pixel is transparent if it's too dark, too washed out, or the wrong hue
+                    let hueDiff = Math.abs(hue - targetHue);
+                    if (hueDiff > 180) hueDiff = 360 - hueDiff; // handle wraparound
+
+                    if (light < 0.1 || sat < 0.1 || hueDiff > sensitivity) {
+                         data[i + 3] = 0;
+                    }
                 }
             }
 
-            // Put modified data back
             ctx.putImageData(imageData, 0, 0);
         }
 
         downloadBtn.addEventListener('click', () => {
             if (outputCanvas.width === 0 || outputCanvas.height === 0) return;
             const link = document.createElement('a');
-            link.download = `${colorSelect.value}-extracted.png`;
+            const system = systemSelect.value;
+            const fileName = system === 'rgb' ? colorSelect.value : `hue-${hueSlider.value}`;
+            link.download = `${fileName}-extracted.png`;
             link.href = outputCanvas.toDataURL('image/png');
             link.click();
         });
